@@ -72,7 +72,7 @@ After training is done, run the test process by
 python scripts/train_vae.py --dataset grab --run_phase test --key <your_wandb_key> --ckpt path/to/checkpoint
 ```
 
-Optionally, you can download our pretrained checkpoint from Google Drive via [this link](https://drive.google.com/file/d/14oID0Hy4EEd6oI0wSVGSbCS2Vhjq46wZ/view?usp=sharing). In this way, you can skip the force labelling step.
+Optionally, you can download our pretrained checkpoint from Google Drive via [this link](https://drive.google.com/uc?export=download&id=14oID0Hy4EEd6oI0wSVGSbCS2Vhjq46wZ). In this way, you can skip the force labelling step.
 
 Place the checkpoint in `checkpoint` folder, then run 
 
