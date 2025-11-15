@@ -1,0 +1,27 @@
+data:
+  dataset: "ho3d"
+  dataset_path: "./data/HO3D_v2"
+  obj_model_path: "./data/YCB_Video"
+  force_label_dir: "force_labels"
+  num_workers: 4
+  normalize: true
+  mano_path: "./data/mano_v1_2"
+  object_sample: 2048
+  pick_every_n_frames: 10
+
+label:
+  default_mjcf_settings:
+    timestep: 0.001
+    solref: "0.02 0.8"
+    margin: "0.003"
+    solimp: "0.7 0.95 0.006 0.5 2"
+    friction: "1. 0.5 0.01"
+    joint_type: hinge
+  adaptive_sim:
+    use_ada_solref: True
+    coarse_search_range:
+      - -3
+      - 3
+    coarse_nbins: 16
+    fine_nbins: 16
+    label_strategy: "min_disp"

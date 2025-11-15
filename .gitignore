@@ -1,0 +1,10 @@
+.idea/**
+checkpoints/**
+data/grab
+data/YCB_Video
+data/mano_v1_2
+force_labels/grab/grab*
+lightning_logs/**
+logs/**
+tmp/**
+**.pyc
