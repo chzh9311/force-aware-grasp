@@ -26,9 +26,7 @@ from common.utils.utils import trimesh2Mesh, linear_normalize
 from common.simulation.mujoco_hand_object_simulator import run_mujoco_simulate
 from common.utils.geometry import compute_signed_distance_and_closest_goemetry
 from common.model.hand_object import HandObject
-from contactopt.diffcontact import calculate_contact_capsule
-from contactopt.util import upscale_contact, mesh_set_color, batched_index_select
-from contactopt.evaluation.mano_train.simulation.simulate import run_simulation, run_sim_parallel_interface
+from common.utils.contact_utils import calculate_contact_capsule, upscale_contact, mesh_set_color, batched_index_select
 
 from multiprocessing.pool import Pool
 
@@ -233,98 +231,6 @@ class ForceLabellingModel:
                 pickle.dump(simu_result, f)
         # self.pool.join()
 
-    def run_pybullet_labelling(self):
-        vhacd_exe = "/home/zxc417/Projects/Toolboxes/v-hacd/app/build/TestVHACD"
-        with alive_bar(len(self.dataloader)) as bar:
-            for idx, batch in enumerate(self.dataloader):
-                for k, v in batch.items():
-                    if type(v) is torch.Tensor:
-                        batch[k] = v.to(self.device)
-                hand_models, hand_joints, obj_models = self.get_batch_ho_models(batch, self.dataset_name)
-                client = bc.BulletClient(connection_mode=pybullet.DIRECT)
-                for i in range(len(batch['frameName'])):
-                    fid = batch['frameName'][i].replace('/', '_')
-                    disp = run_simulation(hand_models[i].vertices, hand_models[i].faces, obj_models[i].vertices,
-                                   obj_models[i].faces, indicator=fid, client=client, simulation_step=0.0001, num_iterations=10000,
-                                   hand_restitution=0.99, object_restitution=0.99, hand_friction=1, object_friction=1,
-                                   vhacd_exe=vhacd_exe, save_video=False, save_video_path='tmp/pybullet/', use_gui=False)
-                    print(disp)
-                break
-
-        # vis_contact_force()
-        # pos_disp = np.linalg.norm(disps[:, :3], axis=1) * 1000
-        # rot_disp = np.arccos(disps[:, 3]) * 2
-        # fig, axes = plt.subplots(2, 1, figsize=(10, 10))
-        # axes[0].hist(pos_disp, bins=100, density=True)
-        # axes[0].set_xlabel('Positional displacement (mm)')
-        # axes[1].hist(rot_disp, bins=100, density=True)
-        # axes[1].set_xlabel('Rotation displacement (radian)')
-        # fig.suptitle('Simulation displacements')
-        # print(f"""Statistics:
-        # avg position displacement: {np.mean(pos_disp):.2f} (mm); avg rotation displacement: {np.mean(rot_disp):.2f} (radian).
-        # std position displacement: {np.std(pos_disp):.2f} (mm); std rotation displacement: {np.std(rot_disp):.2f} (radian).
-        # pos_disp < 5cm & rot < 0.17: {np.sum(np.logical_and(pos_disp < 50, rot_disp < 0.17)) * 100 / len(pos_disp):.2f} %.
-        # """)
-        plt.show()
-
-        # with alive_bar(len(self.dataloader)) as bar:
-        #     for idx, batch in enumerate(self.dataloader):
-        #         bar()
-
-    #
-    # def get_batch_ho_models(self, batch, dataset='ho3d'):
-    #     """
-    #     get the hand and object models in trimesh.Trimesh format.
-    #     """
-    #     # hmodel = load_model(osp.join(self.mano_path, 'models', 'MANO_RIGHT.pkl'), ncomps=6, flat_hand_mean=True)
-    #     hand_models, obj_models = [], []
-    #     if dataset == 'ho3d':
-    #         self.manolayer.to(self.device)
-    #         params = {'rot_aa': batch['handPose'][:, :3], 'pose': batch['handPose'][:, 3:],
-    #                   'trans': batch['handTrans'], 'shape': batch['handBeta']}
-    #         handV, handJ, handF = self.manolayer.mesh_data_np(params, is_right=True)
-    #         if self.dataset_name == 'ho3d':
-    #             camEx = batch['camEx'].detach().cpu().numpy()
-    #             hand_joints = apply_transform_joint(handJ, camEx)
-    #
-    #         for i in range(len(batch['objName'])):
-    #             hand_mesh = trimesh.Trimesh(handV[i], handF)
-    #
-    #             if self.dataset_name == 'ho3d':
-    #                 omodel = read_obj(osp.join(self.obj_model_path, 'models', batch['objName'][i], 'textured_simple.obj'))
-    #                 objR = axis_angle_to_matrix(batch['objRot'][i])
-    #                 obj_verts = np.copy(omodel.v @ objR.detach().cpu().numpy().T + batch['objTrans'][i].detach().cpu().numpy())
-    #                 obj_faces = np.copy(omodel.f)
-    #             elif self.dataset_name == 'grab':
-    #                 obj_verts, obj_faces = self.dataset.get_obj_mesh(batch['objName'][i], batch['objRot'][i],
-    #                                                                  batch['objTrans'][i])
-    #             obj_mesh = trimesh.Trimesh(obj_verts, obj_faces)
-    #
-    #             if self.dataset_name == 'ho3d':
-    #                 hand_mesh.apply_transform(camEx[i])
-    #                 obj_mesh.apply_transform(camEx[i])
-    #             hand_models.append(hand_mesh)
-    #             obj_models.append(obj_mesh)
-    #     elif dataset == 'grab':
-    #         hand_joints = []
-    #         for i in range(len(batch['objName'])):
-    #             obj_verts, obj_faces = self.dataset.get_obj_mesh(
-    #                 batch['objName'][i], batch['objRot'][i], batch['objTrans'][i])
-    #             side = batch['handSide'][i]
-    #             handV = batch['handVerts'][i].squeeze().detach().cpu().numpy()
-    #             handF = self.manolayer.mano_f[side].copy()
-    #             if side == 'left':
-    #                 handV[:, 0] *= -1
-    #                 handF[:, [0, 1]] = handF[:, [1, 0]]
-    #                 obj_verts[:, 0] *= -1
-    #                 obj_faces[:, [0, 1]] = obj_faces[:, [1, 0]]
-    #             hand_models.append(trimesh.Trimesh(handV, handF))
-    #             obj_models.append(trimesh.Trimesh(obj_verts, obj_faces))
-    #             hand_joints.append(batch['handJoints'][i, 0, :16].cpu().numpy())
-    #         hand_joints = np.stack(hand_joints, axis=0)
-    #
-    #     return hand_models, hand_joints, obj_models
-    #
     def visualize_ho_features(self, hand_mesh, obj_mesh, hand_contact, obj_contact, hand_part, obj_part, hand_pressure=None, obj_pressure=None):
         # 16 parts
         offset = np.array([0, 0.3, 0])

@@ -12,10 +12,6 @@ import pybullet as p
 import skvideo
 import skvideo.io as skvio
 
-hostname = socket.gethostname()
-if hostname == "benat":
-    skvideo.setFFmpegPath("/home/jifei/anaconda3/envs/contactopt/bin")
-
 
 def take_picture(renderer, width=256, height=256, scale=0.001, conn_id=None):
     view_matrix = p.computeViewMatrix([0, 0, -1], [0, 0, 0], [0, -1, 0], physicsClientId=conn_id)
@@ -36,15 +32,15 @@ def write_video(frames, path):
 
 
 def process_sample(
-    sample_idx,
-    sample_info,
-    save_gif_folder=None,
-    save_obj_folder=None,
-    vhacd_exe=None,
-    use_gui=False,
-    wait_time=0,
-    sample_vis_freq=10,
-    save_all_steps=True,
+        sample_idx,
+        sample_info,
+        save_gif_folder=None,
+        save_obj_folder=None,
+        vhacd_exe=None,
+        use_gui=False,
+        wait_time=0,
+        sample_vis_freq=10,
+        save_all_steps=True,
 ):
     if use_gui:
         conn_id = p.connect(p.GUI)
@@ -111,30 +107,30 @@ def run_sim_parallel_interface(params):
     return run_simulation(**params)
 
 def run_simulation(
-    hand_verts,
-    hand_faces,
-    obj_verts,
-    obj_faces,
-    indicator,
-    client,
-    obj_hulls=[],
-    simulation_step=1 / 240,
-    num_iterations=35,
-    object_friction=3,
-    hand_friction=3,
-    hand_restitution=0,
-    object_restitution=0.5,
-    object_mass=1,
-    verbose=False,
-    vhacd_resolution=1000,
-    vhacd_exe=None,
-    wait_time=0,
-    save_video=True,
-    save_video_path=None,
-    save_hand_path=None,
-    save_obj_path=None,
-    save_simul_folder=None,
-    use_gui=False,
+        hand_verts,
+        hand_faces,
+        obj_verts,
+        obj_faces,
+        indicator,
+        client,
+        obj_hulls=[],
+        simulation_step=1 / 240,
+        num_iterations=35,
+        object_friction=3,
+        hand_friction=3,
+        hand_restitution=0,
+        object_restitution=0.5,
+        object_mass=1,
+        verbose=False,
+        vhacd_resolution=1000,
+        vhacd_exe=None,
+        wait_time=0,
+        save_video=True,
+        save_video_path=None,
+        save_hand_path=None,
+        save_obj_path=None,
+        save_simul_folder=None,
+        use_gui=False,
 ):
     hand_indicies = hand_faces.flatten().tolist()
     client.resetSimulation()
@@ -280,19 +276,19 @@ def run_simulation(
 
 
 def vhacd(
-    filename,
-    vhacd_path,
-    resolution=1000,
-    concavity=0.001,
-    planeDownsampling=4,
-    convexhullDownsampling=4,
-    alpha=0.05,
-    beta=0.0,
-    maxhulls=1024,
-    pca=0,
-    mode=0,
-    maxNumVerticesPerCH=64,
-    minVolumePerCH=0.0001,
+        filename,
+        vhacd_path,
+        resolution=1000,
+        concavity=0.001,
+        planeDownsampling=4,
+        convexhullDownsampling=4,
+        alpha=0.05,
+        beta=0.0,
+        maxhulls=1024,
+        pca=0,
+        mode=0,
+        maxNumVerticesPerCH=64,
+        minVolumePerCH=0.0001,
 ):
 
     cmd_line = (

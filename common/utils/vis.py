@@ -10,7 +10,7 @@ import trimesh
 from matplotlib import pyplot as plt
 
 from common.utils.geometry import get_v2v_rot, normalize_vec
-from contactopt.util import mesh_set_color
+from common.utils.contact_utils import mesh_set_color
 import platform
 import glob
 import os

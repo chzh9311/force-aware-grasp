@@ -15,7 +15,7 @@ from collections import defaultdict
 
 from pytorch3d.transforms import axis_angle_to_matrix, matrix_to_axis_angle
 from torch.nn.utils.rnn import pad_sequence
-from contactopt.diffcontact import calculate_contact_capsule
+from common.utils.contact_utils import calculate_contact_capsule
 from common.utils.utils import trimesh2Mesh, linear_normalize
 from common.utils.manolayer import get_part_meshes
 from common.utils.geometry import quaternion2matrix, flip_x_axis, rodrigues_rot

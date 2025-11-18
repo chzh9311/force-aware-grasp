@@ -1,17 +1,25 @@
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import trimesh
 from pysdf import SDF
+import scipy
+from scipy.stats import entropy
 
-from contactopt.evaluation.mano_train.simulation.simulate import run_simulation
-from contactopt.evaluation.converter import transform_to_canonical, convert_joints
-from contactopt.evaluation.displacement import diversity
+from common.evaluations.bullet_simulation import run_simulation
+from common.utils.converter import transform_to_canonical, convert_joints
 from common.model.force_labelling_trainer import get_force_from_simulation
 
 import pybullet
 import pybullet_utils.bullet_client as bc
+
+
+def diversity(params_list, cls_num=20):
+    # k-means
+    params_list = scipy.cluster.vq.whiten(params_list)
+    codes, dist = scipy.cluster.vq.kmeans(params_list, cls_num)  # codes: [20, 72], dist: scalar
+    vecs, dist = scipy.cluster.vq.vq(params_list, codes)  # assign codes, vecs/dist: [1200]
+    counts, bins = np.histogram(vecs, len(codes))  # count occurrences  count: [20]
+    ee = entropy(counts)
+    return ee, np.mean(dist)
 
 
 def get_force(pressure, verts):
@@ -60,6 +68,7 @@ def mesh_vert_int_exts(obj1_mesh, obj2_verts):
     return sign
 
 
+
 def calc_diversity(hand_joints):
     cluster = []
     cluster2 = []
@@ -89,25 +98,27 @@ def calc_diversity(hand_joints):
 
 
 def parallel_calculate_metrics(params:dict):
-    frame_info = get_force_from_simulation(params)
-    pb_disp = pybullet_parallel_interface(params)
-    int_vol = intersect_vox(params['obj_model'], params['hand_model'], pitch=0.005) * 1000000 # turn to cm3
-    penetration_tol = 0.005
-    hand_verts = params['hand_model'].vertices
-    obj_sdf = SDF(params['obj_model'].vertices, params['obj_model'].faces)
-    hv_sds = obj_sdf(hand_verts)
+    metrics = params['metrics']
+    result = get_force_from_simulation(params)
+    if "PyBullet SimuDisp" in metrics:
+        pb_disp = pybullet_parallel_interface(params) * 100
+        result["PyBullet SimuDisp"] = pb_disp
+        if "Pybullet Stable Rate" in metrics:
+            result["Pybullet Stable Rate"] = pb_disp < 2
+    if "Intersection Volume" in metrics:
+        int_vol = intersect_vox(params['obj_model'], params['hand_model'], pitch=0.005) * 1000000 # turn to cm3
+        result["Intersection Volume"] = int_vol
+    if "Contact Ratio" in metrics:
+        penetration_tol = 0.005
+        hand_verts = params['hand_model'].vertices
+        obj_sdf = SDF(params['obj_model'].vertices, params['obj_model'].faces)
+        hv_sds = obj_sdf(hand_verts)
 
-    # result_close, result_distance, _ = trimesh.proximity.closest_point(params['obj_model'], hand_verts)
-    # sign = mesh_vert_int_exts(params['obj_model'], hand_verts)
-    # nonzero = result_distance > penetration_tol
-    # exterior = [sign == -1][0] # & nonzero
-    # contact = ~exterior
-    contact = hv_sds > - penetration_tol
-    sample_contact = contact.sum() > 0
-    frame_info.update({'pb_disp':pb_disp, 'int_vol': int_vol, 'contact_ratio': sample_contact}) # , 'entropy': entropy,
-                       # 'cluster_size': cluster_size, 'canonical_entropy': entropy_2, 'canonical_cluster_size': cluster_size_2})
+        contact = hv_sds > - penetration_tol
+        sample_contact = contact.sum() > 0
+        result["Contact Ratio"] = sample_contact
 
-    return frame_info
+    return result
 
 
 def pybullet_parallel_interface(params:dict):
@@ -115,14 +126,24 @@ def pybullet_parallel_interface(params:dict):
     hand_verts, hand_faces, obj_verts, obj_faces, fid, obj_hulls = (
         params['hand_model'].vertices, params['hand_model'].faces, params['obj_model'].vertices,
         params['obj_model'].faces, params['idx'], params['obj_hulls'])
-    # int_vol = intersect_vox(params['obj_model'], params['hand_model'], pitch=0.005)
     disp = run_simulation(hand_verts, hand_faces, obj_verts, obj_faces, indicator=fid, client=client, obj_hulls=obj_hulls, save_video=False)
-    # # contact
-    # penetration_tol = 0.005
-    # result_close, result_distance, _ = trimesh.proximity.closest_point(params['obj_model'], hand_verts)
-    # sign = mesh_vert_int_exts(params['obj_model'], hand_verts)
-    # nonzero = result_distance > penetration_tol
-    # exterior = [sign == -1][0] & nonzero
-    # contact = ~exterior
-    # sample_contact = contact.sum() > 0
     return disp
+
+
+def calculate_metrics(param_list, pool=None, metrics=[], reduction='mean'):
+    for p in param_list:
+        p["metrics"] = metrics
+
+    if pool is not None:
+        result_list = pool.map(parallel_calculate_metrics, param_list)
+    else:
+        result_list = [parallel_calculate_metrics(p) for p in param_list]
+    result = {}
+    for k in result_list[0].keys():
+        result[k] = [rit[k] for rit in result_list]
+    for m in metrics:
+        if reduction == 'mean':
+            result[m] = np.mean(np.asarray(result[m])).item()
+        elif reduction == 'sum':
+            result[m] = np.sum(np.asarray(result[m])).item()
+    return result

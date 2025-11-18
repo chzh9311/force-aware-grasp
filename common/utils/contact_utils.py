@@ -2,14 +2,25 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import numpy as np
 import torch
 import pytorch3d.ops
-from torch_geometric.nn import nearest
+from matplotlib import pyplot as plt
+import open3d as o3d
 
-from contactopt.util import *
-from pytorch3d.structures import Meshes
 from common.utils.geometry import normal_matched_nn
 
+def batched_index_select(t, dim, inds):
+    """
+    Helper function to extract batch-varying indicies along array
+    :param t: array to select from
+    :param dim: dimension to select along
+    :param inds: batch-vary indicies
+    :return:
+    """
+    dummy = inds.unsqueeze(2).expand(inds.size(0), inds.size(1), t.size(2))
+    out = t.gather(dim, dummy) # b x e x f
+    return out
 
 def approx_sdf(mesh_verts, mesh_normals, query_points, query_normals, mesh_trimesh, query_trimesh, caps_rad, foreach_on_mesh):
     if foreach_on_mesh:
@@ -210,6 +221,46 @@ def calculate_penetration_cost(hand_verts, hand_normals, object_verts, object_no
     # print('pen score', pen_score)
 
     return pen_score
+
+
+def upscale_contact(obj_mesh, obj_sampled_idx, contact_obj):
+    """
+    When we run objects through our network, they always have a fixed number of vertices.
+    We need to up/downscale the contact from this to the original number of vertices
+    :param obj_mesh: Pytorch3d Meshes object
+    :param obj_sampled_idx: (batch, 2048)
+    :param contact_obj: (batch, 2048)
+    :return:
+    """
+    obj_verts = obj_mesh.verts_padded()
+    _, closest_idx, _ = pytorch3d.ops.knn_points(obj_verts, batched_index_select(obj_verts, 1, obj_sampled_idx), K=1)
+    upscaled = batched_index_select(contact_obj, 1, closest_idx.squeeze(2))
+    return upscaled.detach()
+
+
+def mesh_set_color(color, mesh, colormap=plt.cm.inferno, brightness=None):
+    """
+    Applies colormap to object
+    :param color: Tensor or numpy array, (N, 1)
+    :param mesh: Open3D TriangleMesh
+    :return:
+    """
+    # vertex_colors = np.tile(color.squeeze(), (3, 1)).T
+    # mesh.vertex_colors = o3du.Vector3dVector(vertex_colors)
+    # geometry.apply_colormap(mesh, apply_sigmoid=False)
+
+    colors = np.asarray(color).squeeze()
+    if len(colors.shape) > 1:
+        colors = colors[:, 0]
+
+    if brightness is None:
+        colors[colors < 0.1] = 0.1 # TODO hack to make brighter
+
+    colors = colormap(colors)[:, :3]
+    if brightness is not None:
+        colors = colors * brightness # + np.array([[0.1, 0.1, 0.1]]) * (1 - brightness)
+    colors = o3d.utility.Vector3dVector(colors)
+    mesh.vertex_colors = colors
 
 
 if __name__ == '__main__':

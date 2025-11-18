@@ -11,6 +11,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 eps = torch.tensor(1e-6)  # epsilon
 
+
 def xyz_to_xyz1(xyz):
     """ Convert xyz vectors from [BS, ..., 3] to [BS, ..., 4] for matrix multiplication
     """
@@ -48,9 +49,13 @@ def convert_joints(joints, source, target):
 
     print("-- Undefined convertion. Return original tensor --")
     return joints
+
+
 def pad34_to_44(mat):
     last_row = torch.tensor([0., 0., 0., 1.], device=mat.device).reshape(1, 4).repeat(*mat.shape[:-2], 1, 1)
     return torch.cat([mat, last_row], dim=-2)
+
+
 def batch_dot_product(batch_1, batch_2, keepdim=False):
     """ Performs the batch-wise dot product
     """
@@ -63,29 +68,33 @@ def batch_dot_product(batch_1, batch_2, keepdim=False):
     # # Extract the diagonal
     # batch_dot_prod = batch_prod[:, diag_idx[:,0], diag_idx[:,1]]
     # if keepdim:
-        # batch_dot_prod = batch_dot_prod.reshape(batch_size, -1, 1)
+    # batch_dot_prod = batch_dot_prod.reshape(batch_size, -1, 1)
 
     batch_dot_prod = (batch_1 * batch_2).sum(-1, keepdim=keepdim)
 
     return batch_dot_prod
 
+
 def rotate_axis_angle(v, k, theta):
     # Rotate v around k by theta using rodrigues rotation formula
     v_rot = v * torch.cos(theta) + \
-            torch.cross(k,v)*torch.sin(theta) + \
-            k*batch_dot_product(k,v, True)*(1-torch.cos(theta))
+            torch.cross(k, v) * torch.sin(theta) + \
+            k * batch_dot_product(k, v, True) * (1 - torch.cos(theta))
 
     return v_rot
+
 
 def clip_values(x, min_v, max_v):
     clipped = torch.min(torch.max(x, min_v), max_v)
 
     return clipped
 
+
 def pyt2np(x):
     if isinstance(x, torch.Tensor):
         x = x.cpu().detach().numpy()
     return x
+
 
 def normalize(bv, eps=1e-8):  # epsilon
     """
@@ -96,6 +105,7 @@ def normalize(bv, eps=1e-8):  # epsilon
     norm = torch.max(torch.norm(bv, dim=-1, keepdim=True), eps_mat)
     bv_n = bv / norm
     return bv_n
+
 
 def angle2(v1, v2):
     """
@@ -111,12 +121,14 @@ def angle2(v1, v2):
     )
     return a
 
+
 def signed_angle(v1, v2, ref):
     """
     Calculate signed angles of v1 with respect to v2
 
     The sign is positive if v1 x v2 points to the same direction as ref
     """
+
     def dot(x, y):
         return (x * y).sum(-1)
 
@@ -129,6 +141,7 @@ def signed_angle(v1, v2, ref):
     # import pdb; pdb.set_trace()
     return angles
 
+
 def get_alignment_mat(v1, v2):
     """
     Returns the rotation matrix R, such that R*v1 points in the same direction as v2
@@ -137,6 +150,7 @@ def get_alignment_mat(v1, v2):
     ang = angle2(v1, v2)
     R = rotation_matrix(ang, axis)
     return R
+
 
 def transform_to_canonical(kp3d, is_right, skeleton='bmc'):
     """Undo global translation and rotation
@@ -150,6 +164,7 @@ def transform_to_canonical(kp3d, is_right, skeleton='bmc'):
     # Pad T from 3x4 mat to 4x4 mat
     normalization_mat = pad34_to_44(normalization_mat)
     return kp3d_canonical, normalization_mat
+
 
 def compute_canonical_transform(kp3d, is_right, skeleton='bmc'):
     """
@@ -209,6 +224,7 @@ def set_equal_xyz_scale(ax, X, Y, Z):
     ax.set_zlim(mid_z - max_range, mid_z + max_range)
     return ax
 
+
 def set_axes_equal(ax: plt.Axes):
     """Set 3D plot axes to equal scale.
 
@@ -225,6 +241,7 @@ def set_axes_equal(ax: plt.Axes):
     radius = 0.5 * np.max(np.abs(limits[:, 1] - limits[:, 0]))
     _set_axes_radius(ax, origin, radius)
 
+
 def _set_axes_radius(ax, origin, radius):
     x, y, z = origin
     ax.set_xlim3d([x - radius, x + radius])
@@ -237,7 +254,7 @@ def plot_local_coord_system(local_cs, bones, bone_lengths, root, ax):
     bones = pyt2np(bones.squeeze())
     bone_lengths = pyt2np(bone_lengths.squeeze())
     root = pyt2np(root.squeeze())
-    col = ['r','g','b']
+    col = ['r', 'g', 'b']
     n_fingers = 5
     n_b_per_f = 4
     print("local_cs", local_cs)
@@ -258,6 +275,7 @@ def plot_local_coord_system(local_cs, bones, bone_lengths, root, ax):
 
     set_axes_equal(ax)
     plt.show()
+
 
 def plot_local_coord(local_coords, bone_lengths, root, ax, show=True):
     local_coords = pyt2np(local_coords.squeeze())
@@ -341,8 +359,8 @@ def cross(bv_1, bv_2, do_normalize=False):
 def rotate(v, ax, rad):
     """
     Uses Rodrigues rotation formula
-    Rotates the vectors in v around the axis in ax by rad radians. These 
-    operations are applied on the last dim of the arguments. The parameter rad 
+    Rotates the vectors in v around the axis in ax by rad radians. These
+    operations are applied on the last dim of the arguments. The parameter rad
     is given in radian
     """
     # print("v", v, v.shape)
@@ -351,7 +369,7 @@ def rotate(v, ax, rad):
     sin = torch.sin
     cos = torch.cos
     v_rot = (
-        v * cos(rad) + cross(ax, v) * sin(rad) + ax * batch_dot_product(ax, v, True) * (1 - cos(rad))
+            v * cos(rad) + cross(ax, v) * sin(rad) + ax * batch_dot_product(ax, v, True) * (1 - cos(rad))
     )
     return v_rot
 
@@ -368,10 +386,10 @@ class PoseConverter(nn.Module):
         self.dev = dev
         # self.angle_poly = angle_poly.to(dev)
 
-        self.idx_1 = torch.arange(1,21).to(dev).long()
+        self.idx_1 = torch.arange(1, 21).to(dev).long()
         self.idx_2 = torch.zeros(20).to(dev).long()
         self.idx_2[:5] = 0
-        self.idx_2[5:] = torch.arange(1,16)
+        self.idx_2[5:] = torch.arange(1, 16)
         # For preprocess joints
         self.shift_factor = 0  # 0.5
         # For poly distance
@@ -392,7 +410,7 @@ class PoseConverter(nn.Module):
         # self.n_poly = n_poly
         # self.n_vert = n_vert
         # self.edges = edges
-        self.dot = lambda x,y: (x*y).sum(-1)
+        self.dot = lambda x, y: (x * y).sum(-1)
         # self.l2 = self.dot(edges,edges)
         self.zero = torch.zeros((1), device=dev)
         self.one = torch.ones((1), device=dev)
@@ -400,20 +418,20 @@ class PoseConverter(nn.Module):
         self.rb_idx = torch.arange(5, device=dev).long()
         self.nrb_idx_list = []
         for i in range(2, 4):
-            self.nrb_idx_list += [torch.arange(i*5, (i+1)*5, device=dev).long()]
-        self.nrb_idx = torch.arange(5,20, device=dev).long()
+            self.nrb_idx_list += [torch.arange(i * 5, (i + 1) * 5, device=dev).long()]
+        self.nrb_idx = torch.arange(5, 20, device=dev).long()
         self.one = torch.ones((1), device=dev)
         self.zero = torch.zeros((1), device=dev)
         self.eps_mat = torch.tensor(1e-9, device=dev)  # epsilon
         self.eps = eps
         self.eps_poly = 1e-2
 
-        self.y_axis = torch.tensor([[[0,1.,0]]], device=dev)
-        self.x_axis = torch.tensor([[[1.,0,0]]], device=dev)
-        self.z_axis = torch.tensor([[[0],[0],[1.]]], device=dev)
-        self.xz_mat = torch.tensor([[[[1.,0,0],[0,0,0],[0,0,1]]]], device=dev)
-        self.yz_mat = torch.tensor([[[[0,0,0],[0,1.,0],[0,0,1]]]], device=dev)
-        self.flipLR = torch.tensor([[[-1.,1.,1.]]], device=dev)
+        self.y_axis = torch.tensor([[[0, 1., 0]]], device=dev)
+        self.x_axis = torch.tensor([[[1., 0, 0]]], device=dev)
+        self.z_axis = torch.tensor([[[0], [0], [1.]]], device=dev)
+        self.xz_mat = torch.tensor([[[[1., 0, 0], [0, 0, 0], [0, 0, 1]]]], device=dev)
+        self.yz_mat = torch.tensor([[[[0, 0, 0], [0, 1., 0], [0, 0, 1]]]], device=dev)
+        self.flipLR = torch.tensor([[[-1., 1., 1.]]], device=dev)
 
         self.bones = None
         self.bone_lengths = None
@@ -431,54 +449,55 @@ class PoseConverter(nn.Module):
         if straight_hand:
             # For NASA - no additional rotation
             self.canonical_rot_angles = torch.tensor([[[0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0],
-                [0, 0]]]
-            )
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0],
+                                                       [0, 0]]]
+                                                     )
         else:
             # # For MANO
-            self.canonical_rot_angles = torch.tensor([[[-6.8360e-01,  2.8175e-01],
-                [-1.3016e+00, -1.4236e-03],
-                [-1.5708e+00, -1.4236e-03],
-                [-1.8425e+00,  7.4600e-02],
-                [-2.0746e+00,  1.8700e-01],
-                [-4.2529e-01,  1.4156e-01],
-                [-1.5473e-01,  1.8678e-01],
-                [-7.1449e-02,  1.4358e-01],
-                [-8.7801e-02, -1.5822e-01],
-                [-1.4013e-01,  3.4336e-02],
-                [ 3.3824e-01,  1.6999e-01],
-                [ 1.8830e-01,  4.8844e-02],
-                [ 1.1238e-01, -8.7551e-03],
-                [ 1.1125e-01,  1.6023e-01],
-                [ 5.3791e-02, -4.2887e-02],
-                [-1.0314e-01, -1.2587e-02],
-                [-9.8003e-02, -1.7479e-01],
-                [-6.6223e-02,  2.9800e-02],
-                [-2.4101e-01, -5.5725e-02],
-                [-1.3926e-01, -8.2840e-02]]]
-            )
+            self.canonical_rot_angles = torch.tensor([[[-6.8360e-01, 2.8175e-01],
+                                                       [-1.3016e+00, -1.4236e-03],
+                                                       [-1.5708e+00, -1.4236e-03],
+                                                       [-1.8425e+00, 7.4600e-02],
+                                                       [-2.0746e+00, 1.8700e-01],
+                                                       [-4.2529e-01, 1.4156e-01],
+                                                       [-1.5473e-01, 1.8678e-01],
+                                                       [-7.1449e-02, 1.4358e-01],
+                                                       [-8.7801e-02, -1.5822e-01],
+                                                       [-1.4013e-01, 3.4336e-02],
+                                                       [3.3824e-01, 1.6999e-01],
+                                                       [1.8830e-01, 4.8844e-02],
+                                                       [1.1238e-01, -8.7551e-03],
+                                                       [1.1125e-01, 1.6023e-01],
+                                                       [5.3791e-02, -4.2887e-02],
+                                                       [-1.0314e-01, -1.2587e-02],
+                                                       [-9.8003e-02, -1.7479e-01],
+                                                       [-6.6223e-02, 2.9800e-02],
+                                                       [-2.4101e-01, -5.5725e-02],
+                                                       [-1.3926e-01, -8.2840e-02]]]
+                                                     )
 
     def initialize_canonical_pose(self, canonical_joints):
         # canonical_joints must be of size [1, 21]
         # Pre-process the joints
-        joints = self.preprocess_joints(canonical_joints, torch.ones(canonical_joints.shape[0], device=canonical_joints.device))
+        joints = self.preprocess_joints(canonical_joints,
+                                        torch.ones(canonical_joints.shape[0], device=canonical_joints.device))
         # Compute the bone vectors
         bones, bone_lengths, kp_to_bone_mat = self.kp3D_to_bones(joints)
 
@@ -494,7 +513,8 @@ class PoseConverter(nn.Module):
         # Copmute the rotation around the y and rotated-x axis
         self.canonical_rot_angles = self.compute_rot_angles(local_coords)
         # check dimentions
-        import pdb; pdb.set_trace()
+        import pdb;
+        pdb.set_trace()
         pass
 
     def _compute_root_plane_angle(self, bones):
@@ -603,7 +623,7 @@ class PoseConverter(nn.Module):
         root_bones = bones[:, rb_idx]
         # Compute the plane normals for each neighbouring root bone pair
         # Compute the plane normals directly
-        plane_normals = torch.cross(root_bones[:,:-1], root_bones[:,1:], dim=2)
+        plane_normals = torch.cross(root_bones[:, :-1], root_bones[:, 1:], dim=2)
         # Compute the plane normals flipped (sometimes gives better grad)
         # WARNING: Uncomment flipping below
         # plane_normals = torch.cross(root_bones[:,1:], root_bones[:,:-1], dim=2)
@@ -613,11 +633,11 @@ class PoseConverter(nn.Module):
         plane_normals = plane_normals / plane_norms
         # Define the normals of the planes on which the fingers reside (model assump.)
         finger_plane_norms = torch.zeros((batch_size, n_fingers, 3), device=dev)
-        finger_plane_norms[:,0] = plane_normals[:,0]
-        finger_plane_norms[:,1] = plane_normals[:,1]
-        finger_plane_norms[:,2] = (plane_normals[:,1] + plane_normals[:,2]) / 2
-        finger_plane_norms[:,3] = (plane_normals[:,2] + plane_normals[:,3]) / 2
-        finger_plane_norms[:,4] = plane_normals[:,3]
+        finger_plane_norms[:, 0] = plane_normals[:, 0]
+        finger_plane_norms[:, 1] = plane_normals[:, 1]
+        finger_plane_norms[:, 2] = (plane_normals[:, 1] + plane_normals[:, 2]) / 2
+        finger_plane_norms[:, 3] = (plane_normals[:, 2] + plane_normals[:, 3]) / 2
+        finger_plane_norms[:, 4] = plane_normals[:, 3]
         # Flip the normals s.t they look towards the palm of the hands
         # finger_plane_norms = -finger_plane_norms
         # Root bones are in the global coordinate system
@@ -626,8 +646,8 @@ class PoseConverter(nn.Module):
         coord_systems[:, rb_idx] = torch.eye(3, device=dev)
         # Root child bone coordinate systems
         z = bones[:, rb_idx]
-        y = torch.cross(bones[:,rb_idx], finger_plane_norms)
-        x = torch.cross(y,z)
+        y = torch.cross(bones[:, rb_idx], finger_plane_norms)
+        x = torch.cross(y, z)
         # Normalize to unit length
         x_norm = torch.max(torch.norm(x, dim=2, keepdim=True), eps_mat)
         x = x / x_norm
@@ -666,43 +686,43 @@ class PoseConverter(nn.Module):
             # Normalize the dot product
             dot_prod_xz = dot_prod_xz / norm_xz
             # Clip such that we do not get NaNs during GD
-            dot_prod_xz = clip_values(dot_prod_xz, -one+eps, one-eps)
+            dot_prod_xz = clip_values(dot_prod_xz, -one + eps, one - eps)
             # Compute the angle from the z-axis
             angle_xz = torch.acos(dot_prod_xz)
             # If lbv2_xz is on the -x side, we interpret it as -angle
-            cond_1 = ((lbv_2_xz[:,:,0] + 1e-6) < 0).float()
-            angle_xz = cond_1 * (-angle_xz) + (1-cond_1) * angle_xz
+            cond_1 = ((lbv_2_xz[:, :, 0] + 1e-6) < 0).float()
+            angle_xz = cond_1 * (-angle_xz) + (1 - cond_1) * angle_xz
             ###### Angle_yz
             # Compute the normalized dot product
             dot_prod_yz = batch_dot_product(lbv_2_xz, lbv_2).squeeze(-1)
             dot_prod_yz = dot_prod_yz / norm_xz
-            dot_prod_yz = clip_values(dot_prod_yz, -one+eps, one-eps)
+            dot_prod_yz = clip_values(dot_prod_yz, -one + eps, one - eps)
             # Compute the angle from the projected bone
             angle_yz = torch.acos(dot_prod_yz)
             # If bone is on -y side, we interpret it as -angle
-            cond_2 = ((lbv_2[:,:,1] + 1e-6) < 0).float()
-            angle_yz = cond_2 * (-angle_yz) + (1-cond_2) * angle_yz
+            cond_2 = ((lbv_2[:, :, 1] + 1e-6) < 0).float()
+            angle_yz = cond_2 * (-angle_yz) + (1 - cond_2) * angle_yz
             ###### Compute the local coordinate system
             angle_xz = angle_xz.unsqueeze(-1)
             angle_yz = angle_yz.unsqueeze(-1)
             # Transform rotation axis to global
-            rot_axis_xz = torch.matmul(p_coord.transpose(2,3),
-                    y_axis.unsqueeze(-1))
+            rot_axis_xz = torch.matmul(p_coord.transpose(2, 3),
+                                       y_axis.unsqueeze(-1))
             rot_axis_y = rotate_axis_angle(x_axis, y_axis, angle_xz)
-            rot_axis_y = torch.matmul(p_coord.transpose(2,3),
-                    rot_axis_y.unsqueeze(-1))
+            rot_axis_y = torch.matmul(p_coord.transpose(2, 3),
+                                      rot_axis_y.unsqueeze(-1))
             rot_axis_y = rot_axis_y.squeeze(-1)
             rot_axis_xz = rot_axis_xz.squeeze(-1)
-            
+
             cond = (torch.abs(angle_xz) < eps).float()
-            x = cond*x + (1-cond)*rotate_axis_angle(x, rot_axis_xz, angle_xz)
-            y = cond*y + (1-cond)*rotate_axis_angle(y, rot_axis_xz, angle_xz)
-            z = cond*z + (1-cond)*rotate_axis_angle(z, rot_axis_xz, angle_xz)
+            x = cond * x + (1 - cond) * rotate_axis_angle(x, rot_axis_xz, angle_xz)
+            y = cond * y + (1 - cond) * rotate_axis_angle(y, rot_axis_xz, angle_xz)
+            z = cond * z + (1 - cond) * rotate_axis_angle(z, rot_axis_xz, angle_xz)
             # Rotate around rotated x/-x
             cond = (torch.abs(angle_yz) < eps).float()
-            x = cond*x + (1-cond)*rotate_axis_angle(x, rot_axis_y, -angle_yz)
-            y = cond*y + (1-cond)*rotate_axis_angle(y, rot_axis_y, -angle_yz)
-            z = cond*z + (1-cond)*rotate_axis_angle(z, rot_axis_y, -angle_yz)
+            x = cond * x + (1 - cond) * rotate_axis_angle(x, rot_axis_y, -angle_yz)
+            y = cond * y + (1 - cond) * rotate_axis_angle(y, rot_axis_y, -angle_yz)
+            z = cond * z + (1 - cond) * rotate_axis_angle(z, rot_axis_y, -angle_yz)
 
             coord_systems[:, idx, 0] = x
             coord_systems[:, idx, 1] = y
@@ -710,12 +730,10 @@ class PoseConverter(nn.Module):
 
         return coord_systems.detach()
 
-
     def compute_local_coordinates(self, bones, coord_systems):
         local_coords = torch.matmul(coord_systems, bones.unsqueeze(-1))
 
         return local_coords.squeeze(-1)
-
 
     def compute_rot_angles(self, local_coords):
         n_bones = local_coords.size(1)
@@ -731,29 +749,28 @@ class PoseConverter(nn.Module):
         norm_xz = torch.max(torch.norm(proj_xz, dim=-1), eps_mat)
         dot_prod_xz = torch.matmul(proj_xz, z_axis).squeeze(-1)
         cond_0 = (torch.abs(dot_prod_xz) < 1e-6).float()
-        dot_prod_xz = cond_0 * 0 + (1-cond_0) * dot_prod_xz
+        dot_prod_xz = cond_0 * 0 + (1 - cond_0) * dot_prod_xz
         dot_prod_xz = dot_prod_xz / norm_xz
-        dot_prod_xz = clip_values(dot_prod_xz, -one+eps, one-eps)
+        dot_prod_xz = clip_values(dot_prod_xz, -one + eps, one - eps)
         # Compute the angle from the z-axis
         angle_xz = torch.acos(dot_prod_xz)
         # If proj_xz is on the -x side, we interpret it as -angle
-        cond_1 = ((proj_xz[:,:,0] + 1e-6) < 0).float()
-        angle_xz = cond_1 * (-angle_xz) + (1-cond_1) * angle_xz
-        # Compute the abduction angle 
+        cond_1 = ((proj_xz[:, :, 0] + 1e-6) < 0).float()
+        angle_xz = cond_1 * (-angle_xz) + (1 - cond_1) * angle_xz
+        # Compute the abduction angle
         dot_prod_yz = batch_dot_product(proj_xz, local_coords).squeeze(-1)
         dot_prod_yz = dot_prod_yz / norm_xz
-        dot_prod_yz = clip_values(dot_prod_yz, -one+eps, one-eps)
+        dot_prod_yz = clip_values(dot_prod_yz, -one + eps, one - eps)
         # Compute the angle from the projected bone
         angle_yz = torch.acos(dot_prod_yz)
         # If bone is on y side, we interpret it as -angle
-        cond_2 = ((local_coords[:,:,1] + 1e-6) > 0).float()
-        angle_yz = cond_2 * (-angle_yz) + (1-cond_2) * angle_yz
+        cond_2 = ((local_coords[:, :, 1] + 1e-6) > 0).float()
+        angle_yz = cond_2 * (-angle_yz) + (1 - cond_2) * angle_yz
         # Concatenate both matrices
         rot_angles = torch.cat((angle_xz.unsqueeze(-1), angle_yz.unsqueeze(-1)),
-                dim=-1)
+                               dim=-1)
 
         return rot_angles
-
 
     def preprocess_joints(self, joints, is_right):
         """
@@ -765,20 +782,20 @@ class PoseConverter(nn.Module):
         # Had to formulate it this way such that backprop works
         joints_pp = 0 + joints
         # Vector from palm to wrist (simplified expression on paper)
-        vec = joints[:,0] - joints[:,3]
+        vec = joints[:, 0] - joints[:, 3]
         vec = vec / torch.norm(vec, dim=1, keepdim=True)
         # This is BUG !!!!
         # Shift palm in direction wrist with factor shift_factor
-        joints_pp[:,0] = joints[:,0] + self.shift_factor * vec
+        joints_pp[:, 0] = joints[:, 0] + self.shift_factor * vec
 
         # joints_pp[:,0] = 2*joints[:,0] - joints[:,3]
         # joints_pp = joints_pp - joints_pp[:,0]
         # if not kp3d_is_right:
-            # joints_pp = joints_pp * torch.tensor([[-1.,1.,1.]]).view(-1,1,3)
+        # joints_pp = joints_pp * torch.tensor([[-1.,1.,1.]]).view(-1,1,3)
 
         # Flip left handed joints
-        is_right = is_right.view(-1,1,1)
-        joints_pp = joints_pp * is_right + (1-is_right) * joints_pp * self.flipLR
+        is_right = is_right.view(-1, 1, 1)
+        joints_pp = joints_pp * is_right + (1 - is_right) * joints_pp * self.flipLR
         # DEBUG
         # joints = joints.clone()
         # palm = joints[:,0]
@@ -789,11 +806,10 @@ class PoseConverter(nn.Module):
         # joints = joints - joints[:,0]
         # # Flip if left hand
         # if not kp3d_is_right:
-            # joints[:,:,0] = joints[:,:,0] * -1
+        # joints[:,:,0] = joints[:,:,0] * -1
 
         # import pdb;pdb.set_trace()
         return joints_pp
-
 
     # def polygon_distance(self, angles):
     #     """
@@ -829,7 +845,7 @@ class PoseConverter(nn.Module):
     #     angles = angles.view(-1, n_poly,1,2)
     #     # Compute distance over all vertices
     #     d = torch.sum(
-    #             torch.abs(torch.cos(angles) - torch.cos(proj)) + 
+    #             torch.abs(torch.cos(angles) - torch.cos(proj)) +
     #             torch.abs(torch.sin(angles) - torch.sin(proj)),
     #             dim=-1)
     #     # Get the min
@@ -838,7 +854,7 @@ class PoseConverter(nn.Module):
     #     d = (contains * 0 + (1-contains) * D) ** 2
 
     #     return d
-    
+
     def compute_rotation_matrix(self, rot_angles, bone_local):
         ''' rot_angles [BS, bone, 2 (flexion angle, abduction angle)]
         '''
@@ -879,7 +895,7 @@ class PoseConverter(nn.Module):
         r_2 = rotation_matrix(flexion_angle, y)
         # print("abduction angle", abduction_angle.shape)
         # assert False
-        
+
         # print("r_1", r_1.shape)
         # print("r_2", r_2.shape)
         r = 0
@@ -901,8 +917,7 @@ class PoseConverter(nn.Module):
         # rot_y_mat = get_rot_mat_y(y_angle)
 
         # rot_x_y = torch.matmul(rot_y_mat, rot_x_mat)
-        return r #  rot_x_y
-
+        return r  # rot_x_y
 
     def get_scale_mat_from_bone_lengths(self, bone_lengths):
         scale_mat = torch.eye(3, device=bone_lengths.device).repeat(*bone_lengths.shape[:2], 1, 1)
@@ -912,8 +927,8 @@ class PoseConverter(nn.Module):
 
         return scale_mat
 
-    
-    def get_trans_mat_with_translation(self, trans_mat_without_scale_translation, local_coords_after_unpose, bones, bone_lengths):
+    def get_trans_mat_with_translation(self, trans_mat_without_scale_translation, local_coords_after_unpose, bones,
+                                       bone_lengths):
         # print("---- get trans mat with translation -----")
         # print("trans_mat_without_scale_translation", trans_mat_without_scale_translation.shape)
         # print("bones", bones.shape)
@@ -931,7 +946,7 @@ class PoseConverter(nn.Module):
         lev_3 = [10, 11, 12, 13, 14]
         lev_4 = [15, 16, 17, 18, 19]
 
-        root_trans =  translation[:, lev_1] * 0.
+        root_trans = translation[:, lev_1] * 0.
         lev_1_trans = translation[:, lev_1]
         lev_2_trans = translation[:, lev_2] + lev_1_trans
         lev_3_trans = translation[:, lev_3] + lev_2_trans
@@ -945,16 +960,14 @@ class PoseConverter(nn.Module):
         # print("final trans", final_trans, final_trans.shape)
         final_trans = final_trans.unsqueeze(-1)
 
-
         trans_mat = torch.cat([trans_mat_without_scale_translation, final_trans], dim=3)
         # print("trans_mat", trans_mat.shape)
-        last_row = torch.tensor([0., 0., 0., 1.], device=trans_mat.device).repeat(*trans_mat.shape[:2], 1 , 1)
+        last_row = torch.tensor([0., 0., 0., 1.], device=trans_mat.device).repeat(*trans_mat.shape[:2], 1, 1)
         trans_mat = torch.cat([trans_mat, last_row], dim=2)
         # start_point = (bones[idx] * bone_lengths[idx])
         # print("---- END get trans mat with translation -----")
         return trans_mat
 
-    
     # def get_trans_mat_kinematic_chain(self, trans_mat_3_4):
 
     #     print("**** kinematic chain ****")
@@ -963,13 +976,12 @@ class PoseConverter(nn.Module):
     #     last_row = torch.tensor([0., 0., 0., 1.], device=trans_mat_3_4.device).repeat(*trans_mat_3_4.shape[:2], 1 , 1)
     #     trans_mat = torch.cat([trans_mat_3_4, last_row], dim=2)
     #     print("trans_mat", trans_mat.shape)
-        
+
     #     # no root
     #     lev_1 = [0, 1, 2, 3, 4]
     #     lev_2 = [5, 6, 7, 8, 9]
     #     lev_3 = [10, 11, 12, 13, 14]
     #     lev_4 = [15, 16, 17, 18, 19]
-
 
     #     lev_1_mat = trans_mat[:, lev_1, : , :]
     #     lev_2_mat = torch.matmul(trans_mat[:, lev_2, : , :], lev_1_mat)
@@ -988,7 +1000,7 @@ class PoseConverter(nn.Module):
         last_col = torch.zeros(1, device=mat_3x3.device).repeat(*mat_3x3.shape[:2], 3, 1)
         mat_3x4 = torch.cat([mat_3x3, last_col], dim=3)
         # print("mat_3x3", mat_3x3.shape)
-        last_row = torch.tensor([0., 0., 0., 1.], device=mat_3x4.device).repeat(*mat_3x4.shape[:2], 1 , 1)
+        last_row = torch.tensor([0., 0., 0., 1.], device=mat_3x4.device).repeat(*mat_3x4.shape[:2], 1, 1)
         mat_4x4 = torch.cat([mat_3x4, last_row], dim=2)
         return mat_4x4
 
@@ -1014,8 +1026,8 @@ class PoseConverter(nn.Module):
         loacl_cs_transpose[:, lev_4] = torch.matmul(loacl_cs_transpose[:, lev_4], lev_3_rot)
 
         transpose_cs = torch.transpose(adjust_cs, -2, -1)
-        # transpose_cs = torch.inverse(adjust_cs) 
-        return loacl_cs_transpose # transpose_cs
+        # transpose_cs = torch.inverse(adjust_cs)
+        return loacl_cs_transpose  # transpose_cs
 
     def normalize_root_planes(self, bones, bone_lengths):
         # root = torch.zeros([3])
@@ -1073,8 +1085,8 @@ class PoseConverter(nn.Module):
         # Propagate rotations along kinematic chains
         for i in range(5):
             for j in range(3):
-                root_plane_norm_mat[:, (j+1)*5 + i] = root_plane_norm_mat[:, i]
-        
+                root_plane_norm_mat[:, (j + 1) * 5 + i] = root_plane_norm_mat[:, i]
+
         new_bones = torch.matmul(root_plane_norm_mat, bones_ori.unsqueeze(-1)).squeeze(-1)
 
         # plot_local_coord(new_bones, bone_lengths, root, ax)
@@ -1082,14 +1094,14 @@ class PoseConverter(nn.Module):
 
         return new_bones, root_plane_norm_mat
 
-    def normalize_root_bone_angles(self, bones, bone_lengths):        
+    def normalize_root_bone_angles(self, bones, bone_lengths):
         # root = torch.zeros([3])
         # fig = plt.figure()
         # ax = fig.add_subplot(111, projection='3d', title='bones angle')
         # plot_local_coord(bones, bone_lengths, root, ax, show=False)
 
         bones_ori = bones + 0
-        canonical_angle = 0.2 # 0.1
+        canonical_angle = 0.2  # 0.1
         # angle between (t,i), (i,m), (m,r), (r,p)
         # canonical_angle = self.root_bone_angles
         canonical_angle = np.array([0.4, 0.2, 0.2, 0.2])
@@ -1108,8 +1120,8 @@ class PoseConverter(nn.Module):
         n1 = cross(bones_2, bones_1, do_normalize=True)
         f2_f1_angle = signed_angle(bones_2, bones_1, n1)
         index_trans = rotation_matrix(canonical_angle[1] - f2_f1_angle, n1)
-        root_angle_norm_mat[:, 1] =  index_trans
-        root_angle_norm_mat[:, 0] =  index_trans
+        root_angle_norm_mat[:, 1] = index_trans
+        root_angle_norm_mat[:, 0] = index_trans
         bones_1 = torch.matmul(index_trans, bones_1.unsqueeze(-1)).squeeze(-1)
         bones_0 = torch.matmul(index_trans, bones_0.unsqueeze(-1)).squeeze(-1)
         # bones_plot = torch.matmul(root_angle_norm_mat, bones_ori.unsqueeze(-1)).squeeze(-1)
@@ -1129,8 +1141,8 @@ class PoseConverter(nn.Module):
         n2 = cross(bones_3, bones_2, do_normalize=True)
         f3_f2_angle = signed_angle(bones_3, bones_2, n2)
         ring_trans = rotation_matrix(f3_f2_angle - canonical_angle[2], n2)
-        root_angle_norm_mat[:, 3] =  ring_trans
-        root_angle_norm_mat[:, 4] =  ring_trans
+        root_angle_norm_mat[:, 3] = ring_trans
+        root_angle_norm_mat[:, 4] = ring_trans
         bones_3 = torch.matmul(ring_trans, bones_3.unsqueeze(-1)).squeeze(-1)
         bones_4 = torch.matmul(ring_trans, bones_4.unsqueeze(-1)).squeeze(-1)
         # bones_plot = torch.matmul(root_angle_norm_mat, bones_ori.unsqueeze(-1)).squeeze(-1)
@@ -1149,13 +1161,13 @@ class PoseConverter(nn.Module):
         # Propagate rotations along kinematic chains
         for i in range(5):
             for j in range(3):
-                root_angle_norm_mat[:, (j+1)*5 + i] = root_angle_norm_mat[:, i]
-        
+                root_angle_norm_mat[:, (j + 1) * 5 + i] = root_angle_norm_mat[:, i]
+
         new_bones = torch.matmul(root_angle_norm_mat, bones_ori.unsqueeze(-1)).squeeze(-1)
 
         # plot_local_coord(new_bones, bone_lengths, root, ax, show=True)
         # import pdb; pdb.set_trace()
-        
+
         return new_bones, root_angle_norm_mat
 
     def forward(self, joints, kp3d_is_right, return_rot_only=False):
@@ -1173,7 +1185,8 @@ class PoseConverter(nn.Module):
         # Normalize the root bone planes
         plane_normalized_bones, root_plane_norm_mat = self.normalize_root_planes(bones, bone_lengths)
         # Normalize angles between root bones
-        angle_normalized_bones, root_angle_norm_mat = self.normalize_root_bone_angles(plane_normalized_bones, bone_lengths)
+        angle_normalized_bones, root_angle_norm_mat = self.normalize_root_bone_angles(plane_normalized_bones,
+                                                                                      bone_lengths)
         bones = angle_normalized_bones
 
         # Plot root bone normalization
@@ -1184,7 +1197,7 @@ class PoseConverter(nn.Module):
         # plot_local_coord(angle_normalized_bones, bone_lengths, root, ax, show=True)
 
         # Combine plane normalization and angle normalization
-        root_bones_norm_mat = torch.matmul(root_angle_norm_mat, root_plane_norm_mat) # root_plane_norm_mat
+        root_bones_norm_mat = torch.matmul(root_angle_norm_mat, root_plane_norm_mat)  # root_plane_norm_mat
         # print("root_bones_norm_mat", root_bones_norm_mat.shape)
         # root_bones_norm_mat = torch.eye(3, device=bones.device).reshape(1, 1, 3, 3).repeat(*bones.shape[0:2], 1, 1)
         # print("root_bones_norm_mat", root_bones_norm_mat.shape)
@@ -1248,7 +1261,6 @@ class PoseConverter(nn.Module):
         # print("normal transpose")
         # plot_local_coord(local_coords_normal_transpose, bone_lengths, root, ax)
 
-
         # print("bone_lengths", bone_lengths, bone_lengths.shape)
 
         # scale_mat = self.get_scale_mat_from_bone_lengths(bone_lengths)
@@ -1261,7 +1273,7 @@ class PoseConverter(nn.Module):
 
         # This return 4 x 4 transformation matrix
         # trans_mat_kinematic_chain = self.get_trans_mat_kinematic_chain(trans_mat_with_translation)
-        
+
         trans_mat_without_scale_translation = self.from_3x3_mat_to_4x4(trans_mat_without_scale_translation)
 
         # Convert bones back to keypoints
@@ -1280,7 +1292,6 @@ class PoseConverter(nn.Module):
 
         bone_lengths = torch.cat([torch.ones([trans_mat.shape[0], 1, 1], device=trans_mat.device), bone_lengths], dim=1)
 
-
         # Compute the angle loss
         # def interval_loss(x, min_v, max_v):
         #     if min_v.dim() == 1:
@@ -1295,7 +1306,7 @@ class PoseConverter(nn.Module):
         # Compute the final loss
         # per_batch_loss = poly_d.mean(1)
         # angle_loss = per_batch_loss.mean()
-        
+
         # Storage for debug purposes
         # self.per_batch_loss = per_batch_loss.detach()
         self.bones = bones.detach()
@@ -1304,13 +1315,15 @@ class PoseConverter(nn.Module):
         self.nrb_rot_angles = nrb_rot_angles.detach()
         # self.loss_per_sample = poly_d.detach()
 
-        return trans_mat , bone_lengths # rot_mat # rot_angles # angle_loss
+        return trans_mat, bone_lengths  # rot_mat # rot_angles # angle_loss
 
 
 if __name__ == '__main__':
     import sys
+
     sys.path.append('.')
     import matplotlib.pyplot as plt
+
     plt.ion()
     from pose.utils.visualization_2 import plot_fingers
     import yaml
@@ -1322,7 +1335,7 @@ if __name__ == '__main__':
     cfg_path = "hp_params/all_params.yaml"
     hand_constraints = yaml.load(open(cfg_path).read())
     # Hand parameters
-    for k,v in hand_constraints.items():
+    for k, v in hand_constraints.items():
         if isinstance(v, list):
             hand_constraints[k] = torch.from_numpy(np.array(v)).float()
 
@@ -1336,28 +1349,36 @@ if __name__ == '__main__':
     tol = 1e-8
     for i in tqdm(range(len(data_reader))):
         sample = data_reader[i]
-        kp3d = sample["joints3d"].view(-1,21,3)
-        is_right = sample["kp3d_is_right"].view(-1,1)
+        kp3d = sample["joints3d"].view(-1, 21, 3)
+        is_right = sample["kp3d_is_right"].view(-1, 1)
         loss = angle_loss(kp3d, is_right)
-        import pdb;pdb.set_trace()
+        import pdb;
+
+        pdb.set_trace()
         if loss > tol:
             print("ERROR")
             plot_fingers(kp3d[0])
-            import pdb;pdb.set_trace()
+            import pdb;
+
+            pdb.set_trace()
         # Shifting shouldnt cause an issue neither
-        kp3d_center = kp3d - kp3d[:,0:1]
+        kp3d_center = kp3d - kp3d[:, 0:1]
         loss = angle_loss(kp3d_center, is_right)
         if loss > tol:
             print("ERROR")
             plot_fingers(kp3d_center[0])
-            import pdb;pdb.set_trace()
+            import pdb;
+
+            pdb.set_trace()
         # Scaling should be 0 error too
         kp3d_scale = kp3d * 10
         loss = angle_loss(kp3d_scale, is_right)
         if loss > tol:
             print("ERROR")
             plot_fingers(kp3d_scale[0])
-            import pdb;pdb.set_trace()
+            import pdb;
+
+            pdb.set_trace()
 
     ##### SGD Test
     # torch.manual_seed(4)
@@ -1372,23 +1393,23 @@ if __name__ == '__main__':
     # i = 0
     # while True:
     # # while i < 100:
-        # loss = root_bone_loss(x, is_right)
-        # loss.backward()
-        # if (i % print_freq) == 0:
-            # print("It: %d\tLoss: %.08f" % (i,loss.item()))
-            # to_plot = x[0].clone()
-            # ax = plot_fingers(to_plot, ax=ax, set_view=False)
-            # to_plot = to_plot.detach().numpy()
-            # ax.plot(to_plot[1:6,0], to_plot[1:6,1], to_plot[1:6,2], 'b')
-            # plt.show()
-            # plt.pause(0.001)
-            # if i == 0:
-                # # Pause for initial conditions
-                # input()
+    # loss = root_bone_loss(x, is_right)
+    # loss.backward()
+    # if (i % print_freq) == 0:
+    # print("It: %d\tLoss: %.08f" % (i,loss.item()))
+    # to_plot = x[0].clone()
+    # ax = plot_fingers(to_plot, ax=ax, set_view=False)
+    # to_plot = to_plot.detach().numpy()
+    # ax.plot(to_plot[1:6,0], to_plot[1:6,1], to_plot[1:6,2], 'b')
+    # plt.show()
+    # plt.pause(0.001)
+    # if i == 0:
+    # # Pause for initial conditions
+    # input()
 
-        # with torch.no_grad():
-            # x = x - lr * x.grad
+    # with torch.no_grad():
+    # x = x - lr * x.grad
 
-        # x.requires_grad_()
-        # i += 1
+    # x.requires_grad_()
+    # i += 1
 

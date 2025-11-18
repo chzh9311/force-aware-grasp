@@ -20,12 +20,9 @@ import pytorch3d
 from prev_sota.contactgen.manopth.manolayer import ManoLayer as testML
 from common.utils.manolayer import ManoLayer
 from common.model.hand_object import HandObject
-from common.model.pose_optimizer import phy_optimize_pose, phy_optimize_sdf_hand
+from common.model.pose_optimizer import phy_optimize_sdf_hand
 from common.model.losses import calc_stable_loss, calc_aggregated_stable_loss, part_cluster_loss
 from prev_sota.contactgen.hand_sdf import ArtiHand
-from common.baselines.contact_optimizer import optimize_pose
-# from prev_sota.contactgen.base_net import optimize_pose as ctg_optimize_pose
-# from prev_sota.contactgen.base_net import compute_uv
 from common.evaluations.eval_fns import calculate_metrics, pressure_value_error, calc_diversity
 
 
@@ -212,8 +209,6 @@ class PyramidCVAE(L.LightningModule):
         else:
             self.sample_result = []
 
-        self.result_dict = {'PyBullet SimuDisp': [], 'Penetration': []}
-
     def test_step(self, batch, batch_idx):
         batch_size = self.cfg.test.batch_size
         obj_templates, obj_hull_templates = [], []
@@ -252,7 +247,7 @@ class PyramidCVAE(L.LightningModule):
             # global_pose, mano_pose, mano_shape, mano_trans, history, vis_params = phy_optimize_sdf_hand(
             global_pose, mano_pose, mano_shape, mano_trans, part_pres, new_part_pres = phy_optimize_sdf_hand(
                                 self.hand_model, self.testml[0], self.mano_layer, verts_obj, ho_gt.obj_normals,
-                                contacts_object, partition_object, pressure_object, pose_iter=1000, ret_history=False)
+                                contacts_object, partition_object, pressure_object, pose_iter=100, ret_history=False)
 
             self.runtime += time.time() - batch_start
             print(self.runtime / (batch_idx + 1))
@@ -303,23 +298,17 @@ class PyramidCVAE(L.LightningModule):
         self.sample_joints.append(handJ)
 
         # result_metrics = self.pool.map(parallel_calculate_metrics, param_list)
-        result_metrics = calculate_metrics(param_list, pool=self.pool, metrics=["PyBullet SimuDisp", "Pybullet Stable Rate",
-                                                                                "Intersection Volume", "Contact Ratio",])
-        int_vol, contact_ratio = np.stack([res['int_vol'] for res in result_metrics]), np.stack([res['contact_ratio'] for res in result_metrics])
-        pb_disp = np.stack([res['pb_disp'] for res in result_metrics], axis=0) * 100
-        disps = np.stack([np.linalg.norm(res['obj_disp'][:3]) for res in result_metrics], axis=0) * 100
-        qposes = np.stack([res['obj_disp'] for res in result_metrics], axis=0)
-        label_disps = np.stack([res['label_obj_disp'] for res in result_metrics], axis=0)
-        contacts = [res['contacts'] for res in result_metrics]
+        metric_names = ["PyBullet SimuDisp", "Pybullet Stable Rate", "Intersection Volume", "Contact Ratio"]
+        results = calculate_metrics(param_list, pool=self.pool, metrics=metric_names)
         #
-        metrics = {
-            'PyBullet SimuDisp': np.mean(pb_disp), 'PyBullet Stable Rate': np.sum(pb_disp < 2) / disps.shape[0],
-            'Intersection Volume': np.mean(int_vol), 'Contact Ratio': np.mean(contact_ratio),
-        }
-        self.result_dict['PyBullet SimuDisp'].append(pb_disp)
-        self.result_dict['Penetration'].append(int_vol)
+        metrics = {}
+        for m in metric_names:
+            metrics[m] = results[m]
 
         ## Calculate the GT pressure map using simulation.
+        qposes = np.stack(results['obj_disp'], axis=0)
+        label_disps = np.stack(results['label_obj_disp'], axis=0)
+        contacts = results['contacts']
         ho_pred.calculate_pressure(contacts, torch.as_tensor(qposes).float(), torch.as_tensor(label_disps).float())
         ## Get part-level contact forces
         gt_part_pres = torch.zeros_like(part_pres, device=self.device).float()
@@ -348,57 +337,13 @@ class PyramidCVAE(L.LightningModule):
         #
         if not self.debug:
             self.logger.log_metrics(metrics)
+        else:
+            print(metrics)
 
         # if batch_idx % self.cfg.test.vis_every_n_batch == 0:
         print(metrics)
         if batch_idx % 1 == 1:
-            ## Visualize some samples:
-            ### Update sample:
-            # for idx in range(32):
-            #     print(batch['handSide'][idx])
-            #     ho_pred.vis_frame(idx)
-            # idx = min(5, ho_pred.obj_verts.shape[0]-1)
-            for idx in range(batch_size):
-                if not self.test_gt and not self.model_cfg.name == 'external' and self.debug:
-                    ho_pred.contact_map, ho_pred.part_map, ho_pred.onehot_pressure = pred_contacts.squeeze(
-                        -1), pred_parts, pred_pressure
-                    contact_mask = ho_pred.contact_map > 0.11
-                    pressure_object = torch.sum(
-                        F.softmax(pred_pressure * 50, dim=-1) * self.mid_pts.to(self.device).view(1, 1, -1), dim=-1)
-                    # for idx in range(len(ho_pred.hand_models)):
-                    # ho_pred.vis_frame(idx, show_procedure=False, show_optim_vars=True, history=history, **vis_params)
-                        ## gt
-                    # ho_pred.aggregate_simu_forces()
-                    # ho_pred.vis_frame(idx, draw_multi_objs=False, draw_maps=False)
-                    # ho_pred.simu_force_vecs[idx] = []
-                    # ho_pred.simu_contact_pts[idx] = []
-                    # ho_pred.simu_part_ids[idx] = []
-                    # avg_force = 0.5295791
-                    # ho_avg = copy(ho_pred)
-                    # for i in range(16):
-                    #     part_mask = torch.logical_and(contact_mask[idx], partition_object[idx] == i)  # B x N
-                    #     if torch.sum(part_mask) > 0:
-                    #         pres = torch.sum(pressure_object[idx].unsqueeze(-1) * -ho_pred.obj_normals[idx] * part_mask.unsqueeze(-1),
-                    #                          dim=0)  # B x 3
-                    #         contact_pt = torch.sum(pressure_object[idx].unsqueeze(-1) * ho_pred.obj_verts[idx] * part_mask.unsqueeze(-1),
-                    #                                dim=0) / ( torch.sum(pressure_object[idx] * part_mask) + 1e-8)  # B x 3
-                    #         ho_pred.simu_force_vecs[idx].append(pres)
-                    #         ho_pred.simu_contact_pts[idx].append(contact_pt)
-                    #         ho_pred.simu_part_ids[idx].append(i)
-                    #         avg_pres = torch.sum(avg_force * -ho_pred.obj_normals[idx] * part_mask.unsqueeze(-1), dim=0)
-                    #         avg_contact_pt = torch.sum(avg_force * ho_pred.obj_verts[idx] * part_mask.unsqueeze(-1),
-                    #                                    dim=0) / (torch.sum(avg_force * part_mask) + 1e-8)  # B x 3
-                    #         ho_avg.simu_force_vecs[idx].append(avg_pres)
-                    #         ho_avg.simu_contact_pts[idx].append(avg_contact_pt)
-                    #         ho_avg.simu_part_ids[idx].append(i)
-                    # ho_pred.simu_force_vecs[idx] = torch.stack(ho_pred.simu_force_vecs[idx])
-                    # ho_avg.simu_force_vecs[idx] = torch.stack(ho_avg.simu_force_vecs[idx])
-                    # # ho_baseline.vis_frame(idx, draw_multi_objs=False, draw_maps=False, draw_force_arrows=False)
-                    # ho_pred.vis_frame(idx, draw_multi_objs=False, draw_maps=False) #, show_optim_vars=True, **vis_params)
-                    # ho_avg.vis_frame(idx, draw_multi_objs=False, draw_maps=False)
-
-                    ho_pred.vis_history(idx, history, **vis_params)
-            # gt_img = ho_gt.vis_img(idx, 300, 1200)
+            idx = np.random.randint(0, len(ho_pred.hand_models))
             if not self.debug:
                 pred_img = ho_pred.vis_img(idx, 300, 1200)
                 # vis_img = np.concatenate((gt_img, pred_img), axis=1)
