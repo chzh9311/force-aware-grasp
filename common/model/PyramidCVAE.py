@@ -26,7 +26,7 @@ from prev_sota.contactgen.hand_sdf import ArtiHand
 from common.baselines.contact_optimizer import optimize_pose
 # from prev_sota.contactgen.base_net import optimize_pose as ctg_optimize_pose
 # from prev_sota.contactgen.base_net import compute_uv
-from common.evaluations.eval_fns import parallel_calculate_metrics, pressure_value_error, calc_diversity
+from common.evaluations.eval_fns import calculate_metrics, pressure_value_error, calc_diversity
 
 
 class PyramidCVAE(L.LightningModule):
@@ -194,9 +194,7 @@ class PyramidCVAE(L.LightningModule):
         self.runtime = 0
         if not self.debug:
             wandb.define_metric("PyBullet SimuDisp", summary='mean')
-            wandb.define_metric("MuJoCo SimuDisp", summary='mean')
             wandb.define_metric("PyBullet Stable Rate", summary='mean')
-            wandb.define_metric("MuJoCo Stable Rate", summary='mean')
             wandb.define_metric('Intersection Volume', summary='mean')
             wandb.define_metric('Contact Ratio', summary='mean')
             wandb.define_metric('Pressure Acc', summary='mean')
@@ -214,7 +212,7 @@ class PyramidCVAE(L.LightningModule):
         else:
             self.sample_result = []
 
-        self.result_dict = {'PyBullet SimuDisp': [], 'MuJoCo SimuDisp': [], 'Penetration': []}
+        self.result_dict = {'PyBullet SimuDisp': [], 'Penetration': []}
 
     def test_step(self, batch, batch_idx):
         batch_size = self.cfg.test.batch_size
@@ -304,7 +302,9 @@ class PyramidCVAE(L.LightningModule):
         assert handJ.shape[1] == 21
         self.sample_joints.append(handJ)
 
-        result_metrics = self.pool.map(parallel_calculate_metrics, param_list)
+        # result_metrics = self.pool.map(parallel_calculate_metrics, param_list)
+        result_metrics = calculate_metrics(param_list, pool=self.pool, metrics=["PyBullet SimuDisp", "Pybullet Stable Rate",
+                                                                                "Intersection Volume", "Contact Ratio",])
         int_vol, contact_ratio = np.stack([res['int_vol'] for res in result_metrics]), np.stack([res['contact_ratio'] for res in result_metrics])
         pb_disp = np.stack([res['pb_disp'] for res in result_metrics], axis=0) * 100
         disps = np.stack([np.linalg.norm(res['obj_disp'][:3]) for res in result_metrics], axis=0) * 100
@@ -314,11 +314,9 @@ class PyramidCVAE(L.LightningModule):
         #
         metrics = {
             'PyBullet SimuDisp': np.mean(pb_disp), 'PyBullet Stable Rate': np.sum(pb_disp < 2) / disps.shape[0],
-            'MuJoCo SimuDisp': np.mean(disps), 'MuJoCo Stable Rate': np.sum(disps < 2) / disps.shape[0],
             'Intersection Volume': np.mean(int_vol), 'Contact Ratio': np.mean(contact_ratio),
         }
         self.result_dict['PyBullet SimuDisp'].append(pb_disp)
-        self.result_dict['MuJoCo SimuDisp'].append(disps)
         self.result_dict['Penetration'].append(int_vol)
 
         ## Calculate the GT pressure map using simulation.
